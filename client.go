@@ -5,7 +5,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/xml"
 	"errors"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,19 +21,16 @@ const ApiVersion string = "2011-08-01"
 const service string = ""
 
 type ApiRequest struct {
-	keyId        string
-	keySecret    string
-	associateTag string
-}
-
-type ItemLookupResponse struct {
+	KeyId        string
+	KeySecret    string
+	AssociateTag string
 }
 
 func (self *ApiRequest) ItemLookup() (ItemLookupResponse, error) {
-	var lookupResp ItemLookupResponse
+	lookupResp := ItemLookupResponse{}
 	urlParams := self.generateQueryParams("ItemLookup")
 
-	signedUrl, _ := generateSignature(urlParams, self.keySecret)
+	signedUrl, _ := generateSignature(urlParams, self.KeySecret)
 
 	log.Println(signedUrl)
 
@@ -39,31 +38,43 @@ func (self *ApiRequest) ItemLookup() (ItemLookupResponse, error) {
 	if err != nil {
 		return lookupResp, err
 	}
+	contents, _ := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		/*		contents, _ := ioutil.ReadAll(resp.Body)
-				log.Println(string(contents))*/
+		log.Println(string(contents))
 		return lookupResp, errors.New("not cool")
 	}
+	log.Println(string(contents))
+
+	err = xml.Unmarshal(contents, &lookupResp)
+	if err != nil {
+		return lookupResp, err
+	}
+
+	/*	if len(lookupResp.Items[0].Errors) > 0 {
+		err = errors.New("oh no")
+	}*/
 
 	return lookupResp, err
 }
 
-func (self *ApiRequest) generateQueryParams(operation string) map[string]string {
+func (self *ApiRequest) generateQueryParams(
+	operation string) map[string]string {
 	params := make(map[string]string)
 
 	params["Service"] = "AWSECommerceService"
 	params["Version"] = ApiVersion
-	params["AssociateTag"] = self.associateTag
+	params["AssociateTag"] = self.AssociateTag
 	params["Operation"] = operation
 	params["SearchIndex"] = "Books"
 	params["Keywords"] = "iñarritu"
-	params["Timestamp"] = time.Now().Format(time.RFC3339)
-	params["AWSAccessKeyId"] = self.keyId
+	params["Timestamp"] = time.Now().Round(time.Second).Format(time.RFC3339)
+	params["AWSAccessKeyId"] = self.KeyId
 
 	return params
 }
 
-func generateSignature(queryParams map[string]string, keySecret string) (string, string) {
+func generateSignature(queryParams map[string]string, keySecret string) (
+	string, string) {
 	const protocol = "http://"
 
 	keys := make([]string, 0, len(queryParams))
@@ -91,7 +102,8 @@ func generateSignature(queryParams map[string]string, keySecret string) (string,
 	hash.Write([]byte(data))
 	signature := base64.StdEncoding.EncodeToString(hash.Sum(nil))
 
-	amzUrl := protocol + amzDomain + amzPath + "?" + strBuff.String() + "&Signature=" + signature
+	amzUrl := protocol + amzDomain + amzPath + "?" + strBuff.String() +
+		"&Signature=" + url.QueryEscape(signature)
 
 	return amzUrl, signature
 }
