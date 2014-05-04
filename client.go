@@ -26,13 +26,13 @@ type ApiRequest struct {
 	AssociateTag string
 }
 
-func (self *ApiRequest) ItemLookup() (ItemLookupResponse, error) {
+func (self *ApiRequest) ItemLookup(p ItemLookupParams) (ItemLookupResponse, error) {
 	lookupResp := ItemLookupResponse{}
-	urlParams := self.generateQueryParams("ItemLookup")
+	urlParams := self.generateQueryParams("ItemLookup", p)
 
 	signedUrl, _ := generateSignature(urlParams, self.KeySecret)
 
-	log.Println(signedUrl)
+	/*	log.Println(signedUrl)*/
 
 	resp, err := http.Get(signedUrl)
 	if err != nil {
@@ -50,23 +50,17 @@ func (self *ApiRequest) ItemLookup() (ItemLookupResponse, error) {
 		return lookupResp, err
 	}
 
-	/*	if len(lookupResp.Items[0].Errors) > 0 {
-		err = errors.New("oh no")
-	}*/
-
 	return lookupResp, err
 }
 
-func (self *ApiRequest) generateQueryParams(
-	operation string) map[string]string {
-	params := make(map[string]string)
+func (self *ApiRequest) generateQueryParams(operation string,
+	p Mappable) map[string]string {
+	params := p.Map()
 
 	params["Service"] = "AWSECommerceService"
 	params["Version"] = ApiVersion
 	params["AssociateTag"] = self.AssociateTag
 	params["Operation"] = operation
-	params["SearchIndex"] = "Books"
-	params["Keywords"] = "iñarritu"
 	params["Timestamp"] = time.Now().Round(time.Second).Format(time.RFC3339)
 	params["AWSAccessKeyId"] = self.KeyId
 
